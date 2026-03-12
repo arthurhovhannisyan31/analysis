@@ -1,11 +1,27 @@
 pub mod parse;
+
 use parse::*;
+use std::cell::RefCell;
+use std::rc::Rc;
 
 #[repr(usize)]
 pub enum ReadMode {
   All = 0,
   Errors = 1,
   Exchanges = 2,
+}
+
+impl From<u8> for ReadMode {
+  fn from(value: u8) -> Self {
+    match value {
+      0 => ReadMode::All,
+      1 => ReadMode::Errors,
+      2 => ReadMode::Exchanges,
+      _ => {
+        panic!("unknown mode {}", value)
+      }
+    }
+  }
 }
 
 /// Обёртка, без которой не выполнено требование `std::io::BufReader<T: std::io::Read>`
@@ -35,10 +51,10 @@ struct LogIterator {
     >,
     fn(&Result<String, std::io::Error>) -> bool,
   >,
-  reader_rc: std::rc::Rc<std::cell::RefCell<Box<dyn MyReader>>>,
+  reader_rc: Rc<RefCell<Box<dyn MyReader>>>,
 }
 impl LogIterator {
-  fn new(r: std::rc::Rc<std::cell::RefCell<Box<dyn MyReader>>>) -> Self {
+  fn new(r: Rc<RefCell<Box<dyn MyReader>>>) -> Self {
     use std::io::BufRead;
     // подсказка: unsafe избыточен, да и весь rc - тоже
     // примечание автора прототипа:
@@ -76,58 +92,35 @@ impl Iterator for LogIterator {
 // подсказка: RefCell вообще не нужен
 /// Принимает поток байт, отдаёт отфильтрованные и распарсенные логи
 pub fn read_log(
-  input: std::rc::Rc<std::cell::RefCell<Box<dyn MyReader>>>,
+  input: Rc<RefCell<Box<dyn MyReader>>>,
   mode: u8,
   request_ids: Vec<u32>,
 ) -> Vec<LogLine> {
-  let logs = LogIterator::new(input);
-  let mut collected = Vec::new();
-  // подсказка: можно обойтись итераторами
-  for log in logs {
-    if request_ids.is_empty()
-      || {
-      let mut request_id_found = false;
-      for request_id in &request_ids {
-        if *request_id == log.request_id {
-          request_id_found = true;
-          break;
-        }
-      }
-      request_id_found
-    }
-      // подсказка: лучше match
-      && if mode == ReadMode::All as u8 {
-      true
-    }
-    else if mode == ReadMode::Errors as u8 {
-      matches!(
-                    &log.kind,
-                    LogKind::System(
-                        SystemLogKind::Error(_)) | LogKind::App(AppLogKind::Error(_)
-                    )
-                )
-    }
-    else if mode == ReadMode::Exchanges as u8 {
-      matches!(
-                    &log.kind,
-                    LogKind::App(AppLogKind::Journal(
-                        AppLogJournalKind::BuyAsset(_)
-                        | AppLogJournalKind::SellAsset(_)
-                        | AppLogJournalKind::CreateUser{..}
-                        | AppLogJournalKind::RegisterAsset{..}
-                        | AppLogJournalKind::DepositCash(_)
-                        | AppLogJournalKind::WithdrawCash(_)
-                    ))
-                )
-    }
-    else {
-      // подсказка: паниковать в библиотечном коде - нехорошо
-      panic!("unknown mode {}", mode)
-    } {
-      collected.push(log);
-    }
-  }
-  collected
+  LogIterator::new(input)
+    .filter(|log| {
+      request_ids.is_empty()
+        || request_ids.contains(&log.request_id)
+          && match ReadMode::from(mode) {
+            ReadMode::All => true,
+            ReadMode::Errors => matches!(
+              &log.kind,
+              LogKind::System(SystemLogKind::Error(_))
+                | LogKind::App(AppLogKind::Error(_))
+            ),
+            ReadMode::Exchanges => matches!(
+              &log.kind,
+              LogKind::App(AppLogKind::Journal(
+                AppLogJournalKind::BuyAsset(_)
+                  | AppLogJournalKind::SellAsset(_)
+                  | AppLogJournalKind::CreateUser { .. }
+                  | AppLogJournalKind::RegisterAsset { .. }
+                  | AppLogJournalKind::DepositCash(_)
+                  | AppLogJournalKind::WithdrawCash(_)
+              ))
+            ),
+          }
+    })
+    .collect()
 }
 
 #[cfg(test)]
@@ -203,14 +196,14 @@ App::Journal BuyAsset UserBacket{"user_id":"Alice","backet":Backet{"asset_id":"m
 
   #[test]
   fn test_all() {
-    let refcell1: std::rc::Rc<std::cell::RefCell<Box<dyn MyReader>>> =
-      std::rc::Rc::new(std::cell::RefCell::new(Box::new(SOURCE1.as_bytes())));
+    let refcell1: Rc<RefCell<Box<dyn MyReader>>> =
+      Rc::new(RefCell::new(Box::new(SOURCE1.as_bytes())));
     assert_eq!(
       read_log(refcell1.clone(), ReadMode::All as u8, vec![]).len(),
       1
     );
-    let refcell: std::rc::Rc<std::cell::RefCell<Box<dyn MyReader>>> =
-      std::rc::Rc::new(std::cell::RefCell::new(Box::new(SOURCE.as_bytes())));
+    let refcell: Rc<RefCell<Box<dyn MyReader>>> =
+      Rc::new(RefCell::new(Box::new(SOURCE.as_bytes())));
     let all_parsed = read_log(refcell.clone(), ReadMode::All as u8, vec![]);
     println!("all parsed:");
     all_parsed
