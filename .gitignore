@@ -1,1 +1,9 @@
+#rust
 /target
+**/*.rs.bk
+
+# editor
+.idea
+
+# local
+**/*notes

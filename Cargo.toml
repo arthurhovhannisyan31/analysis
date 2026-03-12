@@ -2,6 +2,11 @@
 name = "analysis"
 version = "0.1.0"
 edition = "2024"
+description = "Analysis"
+license = "MIT OR Apache-2.0"
+authors = ["Arthur Hovhannisyan <arthurhovhannisyan31@gmail.com>"]
+repository = "https://github.com/arthurhovhannisyan31/analysis"
+rust-version = "1.93.0"
 
 [lib]
 name = "analysis"
