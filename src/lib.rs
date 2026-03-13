@@ -1,7 +1,6 @@
 pub mod parse;
 
 use parse::*;
-use std::cell::RefMut;
 use std::fmt::Debug;
 use std::io::{BufRead, BufReader, Lines, Read};
 use std::iter::Filter;
@@ -26,24 +25,6 @@ impl From<u8> for ReadMode {
   }
 }
 
-/// Обёртка, без которой не выполнено требование `std::io::BufReader<T: Read>`
-#[derive(Debug)]
-struct RefMutWrapper<'a, T>(RefMut<'a, T>);
-impl<'a, T> Read for RefMutWrapper<'a, T>
-where
-  T: Read,
-{
-  fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-    self.0.read(buf)
-  }
-}
-
-/// Для `Box<dyn много трейтов, помимо auto-трейтов>`, (`rustc E0225`)
-/// `only auto traits can be used as additional traits in a trait object`
-/// `consider creating a new trait with all of these as supertraits and using that trait here instead`
-pub trait MyReader: Read + Debug + 'static {}
-impl<T: Read + Debug + 'static> MyReader for T {}
-
 // подсказка: вместо trait-объекта можно дженерик
 /// Итератор, на выходе которого - строки распарсенной структуры данных
 // #[derive(Debug)]
@@ -53,7 +34,6 @@ struct LogIterator {
     fn(&std::io::Result<String>) -> bool,
   >,
 }
-
 impl LogIterator {
   fn new(r: Box<dyn Read>) -> Self {
     Self {
@@ -77,36 +57,36 @@ impl Iterator for LogIterator {
   }
 }
 
-// подсказка: RefCell вообще не нужен
-/// Принимает поток байт, отдаёт отфильтрованные и распарсенные логи
 pub fn read_log(
-  input: Box<dyn MyReader>, // TODO Replace with bufreader or reader
+  input: Box<dyn Read>, // TODO Replace with bufreader or reader
   mode: u8,
   request_ids: Vec<u32>,
 ) -> Vec<LogLine> {
   LogIterator::new(input)
     .filter(|log| {
-      request_ids.is_empty()
-        || request_ids.contains(&log.request_id)
-          && match ReadMode::from(mode) {
-            ReadMode::All => true,
-            ReadMode::Errors => matches!(
-              &log.kind,
-              LogKind::System(SystemLogKind::Error(_))
-                | LogKind::App(AppLogKind::Error(_))
-            ),
-            ReadMode::Exchanges => matches!(
-              &log.kind,
-              LogKind::App(AppLogKind::Journal(
-                AppLogJournalKind::BuyAsset(_)
-                  | AppLogJournalKind::SellAsset(_)
-                  | AppLogJournalKind::CreateUser { .. }
-                  | AppLogJournalKind::RegisterAsset { .. }
-                  | AppLogJournalKind::DepositCash(_)
-                  | AppLogJournalKind::WithdrawCash(_)
-              ))
-            ),
-          }
+      let request_ids_empty = request_ids.is_empty();
+      let has_log_request_id = request_ids.contains(&log.request_id);
+      let read_mode = match ReadMode::from(mode) {
+        ReadMode::All => true,
+        ReadMode::Errors => matches!(
+          &log.kind,
+          LogKind::System(SystemLogKind::Error(_))
+            | LogKind::App(AppLogKind::Error(_))
+        ),
+        ReadMode::Exchanges => matches!(
+          &log.kind,
+          LogKind::App(AppLogKind::Journal(
+            AppLogJournalKind::BuyAsset(_)
+              | AppLogJournalKind::SellAsset(_)
+              | AppLogJournalKind::CreateUser { .. }
+              | AppLogJournalKind::RegisterAsset { .. }
+              | AppLogJournalKind::DepositCash(_)
+              | AppLogJournalKind::WithdrawCash(_)
+          ))
+        ),
+      };
+
+      request_ids_empty || has_log_request_id && read_mode
     })
     .collect()
 }
@@ -118,7 +98,6 @@ mod test {
   const SOURCE1: &'static str =
     r#"System::Error NetworkError "url unknown" requestid=1"#;
 
-  // TODO extract to file or test stub
   const SOURCE: &'static str = r#"
 System::Error NetworkError "network interface is down" requestid=1
 App::Error SystemError "network" requestid=1
@@ -185,9 +164,10 @@ App::Journal BuyAsset UserBacket{"user_id":"Alice","backet":Backet{"asset_id":"m
 
   #[test]
   fn test_all() {
-    let refcell1: Box<dyn MyReader> = Box::new(SOURCE1.as_bytes());
+    let refcell1: Box<dyn Read> = Box::new(SOURCE1.as_bytes());
     assert_eq!(read_log(refcell1, ReadMode::All as u8, vec![]).len(), 1);
-    let refcell: Box<dyn MyReader> = Box::new(SOURCE.as_bytes());
+
+    let refcell: Box<dyn Read> = Box::new(SOURCE.as_bytes());
     let all_parsed = read_log(refcell, ReadMode::All as u8, vec![]);
     println!("all parsed:");
     all_parsed
