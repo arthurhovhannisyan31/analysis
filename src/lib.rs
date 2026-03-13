@@ -1,8 +1,7 @@
 pub mod parse;
 
 use parse::*;
-use std::fmt::Debug;
-use std::io::{BufRead, BufReader, Lines, Read};
+use std::io::{BufRead, Lines};
 use std::iter::Filter;
 
 #[repr(usize)]
@@ -25,19 +24,14 @@ impl From<u8> for ReadMode {
   }
 }
 
-// подсказка: вместо trait-объекта можно дженерик
-/// Итератор, на выходе которого - строки распарсенной структуры данных
-// #[derive(Debug)]
-struct LogIterator {
-  lines: Filter<
-    Lines<BufReader<Box<dyn Read>>>,
-    fn(&std::io::Result<String>) -> bool,
-  >,
+#[derive(Debug)]
+struct LogIterator<R: BufRead> {
+  lines: Filter<Lines<R>, fn(&std::io::Result<String>) -> bool>,
 }
-impl LogIterator {
-  fn new(r: Box<dyn Read>) -> Self {
+impl<R: BufRead> LogIterator<R> {
+  fn new(r: R) -> Self {
     Self {
-      lines: BufReader::with_capacity(4096, r).lines().filter(|line| {
+      lines: r.lines().filter(|line| {
         !line
           .as_ref()
           .ok()
@@ -47,7 +41,7 @@ impl LogIterator {
     }
   }
 }
-impl Iterator for LogIterator {
+impl<R: BufRead> Iterator for LogIterator<R> {
   type Item = parse::LogLine;
   fn next(&mut self) -> Option<Self::Item> {
     let line = self.lines.next()?.ok()?;
@@ -57,8 +51,8 @@ impl Iterator for LogIterator {
   }
 }
 
-pub fn read_log(
-  input: Box<dyn Read>, // TODO Replace with bufreader or reader
+pub fn read_log<R: BufRead>(
+  input: R,
   mode: u8,
   request_ids: Vec<u32>,
 ) -> Vec<LogLine> {
@@ -94,11 +88,12 @@ pub fn read_log(
 #[cfg(test)]
 mod test {
   use super::*;
+  use std::io::BufReader;
 
-  const SOURCE1: &'static str =
+  const SOURCE_SHORT: &'static str =
     r#"System::Error NetworkError "url unknown" requestid=1"#;
 
-  const SOURCE: &'static str = r#"
+  const SOURCE_LONG: &'static str = r#"
 System::Error NetworkError "network interface is down" requestid=1
 App::Error SystemError "network" requestid=1
 System::Trace SendRequest "CreateUser{\"user_id\": 10, \"authrized_capital\": 1000,}" requestid=2
@@ -164,17 +159,20 @@ App::Journal BuyAsset UserBacket{"user_id":"Alice","backet":Backet{"asset_id":"m
 
   #[test]
   fn test_all() {
-    let refcell1: Box<dyn Read> = Box::new(SOURCE1.as_bytes());
-    assert_eq!(read_log(refcell1, ReadMode::All as u8, vec![]).len(), 1);
+    let source_short_reader = BufReader::new(SOURCE_SHORT.as_bytes());
+    assert_eq!(
+      read_log(source_short_reader, ReadMode::All as u8, vec![]).len(),
+      1
+    );
 
-    let refcell: Box<dyn Read> = Box::new(SOURCE.as_bytes());
-    let all_parsed = read_log(refcell, ReadMode::All as u8, vec![]);
+    let source_long_reader = BufReader::new(SOURCE_LONG.as_bytes());
+    let all_parsed = read_log(source_long_reader, ReadMode::All as u8, vec![]);
     println!("all parsed:");
     all_parsed
       .iter()
       .for_each(|parsed| println!("  {:?}", parsed));
     // 2 для начала и конца строки (чтобы первая и последняя кавычки на отдельных строках были)
     // второе число - число пустых строк, которые оставлены для удобства чтения
-    assert_eq!(all_parsed.len(), SOURCE.lines().count() - 2 - 7);
+    assert_eq!(all_parsed.len(), SOURCE_LONG.lines().count() - 2 - 7);
   }
 }

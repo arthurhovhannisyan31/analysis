@@ -14,7 +14,9 @@
 //  -- по ошибкам
 //  -- по изменению счёта (купить/продать)
 
+use analysis::ReadMode;
 use analysis::parse::Announcements;
+use std::io::BufReader;
 
 // Модель данных:
 // - Пользователь (userid, имя)
@@ -59,19 +61,17 @@ fn main() {
     analysis::parse::parse_asset::<Announcements>(parsing_demo).unwrap();
   println!("demo-parsed: {:?}", announcements);
 
-  // let args = std::env::args().collect::<Vec<_>>();
-  // let filename = args[1].clone();
-  // println!(
-  //   "Trying opening file '{}' from directory '{}'",
-  //   filename,
-  //   std::env::current_dir().unwrap().to_string_lossy()
-  // );
-  // let file: std::rc::Rc<std::cell::RefCell<Box<dyn analysis::MyReader>>> =
-  //   std::rc::Rc::new(std::cell::RefCell::new(Box::new(
-  //     std::fs::File::open(filename).unwrap(),
-  //   )));
-  //
-  // let logs = analysis::read_log(file.clone(), analysis::READ_MODE_ALL, vec![]);
-  // println!("got logs:");
-  // logs.iter().for_each(|parsed| println!("  {:?}", parsed));
+  let args = std::env::args().collect::<Vec<_>>();
+  let filename = args[1].clone();
+  println!(
+    "Trying opening file '{}' from directory '{}'",
+    filename,
+    std::env::current_dir().unwrap().to_string_lossy()
+  );
+  let file = std::fs::File::open(filename).unwrap();
+  let file_reader = BufReader::with_capacity(4096, file);
+
+  let logs = analysis::read_log(file_reader, ReadMode::All as u8, vec![]);
+  println!("got logs:");
+  logs.iter().for_each(|parsed| println!("  {:?}", parsed));
 }
