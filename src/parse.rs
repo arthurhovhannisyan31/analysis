@@ -777,7 +777,6 @@ impl<T: Parser> Parser for Take<T> {
 
 const AUTHDATA_SIZE: usize = 1024;
 
-// подсказка: довольно много места на стэке
 /// Данные для авторизации
 #[derive(Debug, Clone, PartialEq)]
 pub struct AuthData(Vec<u8>);
@@ -1037,7 +1036,6 @@ pub enum AppLogErrorKind {
   LackOf(String),
   SystemError(String),
 }
-// подсказка: а поля не слишком много места на стэке занимают?
 /// Trace [приложения](AppLogKind)
 #[derive(Debug, Clone, PartialEq)]
 pub enum AppLogTraceKind {
@@ -1509,22 +1507,20 @@ impl Parsable for LogLine {
 
 /// Парсер строки логов
 pub struct LogLineParser {
-  parser: std::sync::OnceLock<<LogLine as Parsable>::Parser>,
+  parser: <LogLine as Parsable>::Parser,
+}
+impl LogLineParser {
+  pub fn new() -> Self {
+    Self {
+      parser: <LogLine as Parsable>::parser(),
+    }
+  }
 }
 impl LogLineParser {
   pub fn parse<'a>(&self, input: &'a str) -> Result<(&'a str, LogLine), ()> {
-    self
-      .parser
-      .get_or_init(|| <LogLine as Parsable>::parser())
-      .parse(input)
+    self.parser.parse(input)
   }
 }
-// подсказка: singleton, без которого можно обойтись
-// парсеры не страшно вытащить в pub
-/// Единожды собранный парсер логов
-pub static LOG_LINE_PARSER: LogLineParser = LogLineParser {
-  parser: std::sync::OnceLock::new(),
-};
 
 #[cfg(test)]
 mod test {
