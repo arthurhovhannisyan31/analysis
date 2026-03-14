@@ -1,6 +1,7 @@
 pub mod parse;
 
 use parse::*;
+use std::fmt::Debug;
 use std::io::{BufRead, Lines};
 use std::iter::Filter;
 
@@ -26,7 +27,7 @@ impl From<u8> for ReadMode {
 
 #[derive(Debug)]
 struct LogIterator<R: BufRead> {
-  lines: Filter<Lines<R>, fn(&std::io::Result<String>) -> bool>,
+  lines: Filter<Lines<R>, fn(&std::io::Result<String>) -> bool>, // TODO use Higher order functions
 }
 impl<R: BufRead> LogIterator<R> {
   fn new(r: R) -> Self {
@@ -42,16 +43,15 @@ impl<R: BufRead> LogIterator<R> {
   }
 }
 impl<R: BufRead> Iterator for LogIterator<R> {
-  type Item = parse::LogLine;
+  type Item = LogLine;
   fn next(&mut self) -> Option<Self::Item> {
     let line = self.lines.next()?.ok()?;
-    let (remaining, result) =
-      LOG_LINE_PARSER.parse(line.trim().to_string()).ok()?;
+    let (remaining, result) = LOG_LINE_PARSER.parse(line.trim()).ok()?;
     remaining.trim().is_empty().then_some(result)
   }
 }
 
-pub fn read_log<R: BufRead>(
+pub fn read_log<R: BufRead + Debug>(
   input: R,
   mode: u8,
   request_ids: Vec<u32>,
