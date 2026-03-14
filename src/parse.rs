@@ -14,6 +14,7 @@ trait Parsable: Sized {
 mod stdp {
   // parsers for std types
   use super::Parser;
+  use crate::types::{MyAsciiHexDigit, MyNonZeroU32, MyNonZeroi32};
 
   /// Беззнаковые числа
   #[derive(Debug)]
@@ -37,13 +38,9 @@ mod stdp {
         if is_hex { 16 } else { 10 },
       )
       .map_err(|_| ())?;
-      // подсказка: вместо if можно использовать tight-тип std::num::NonZeroU32
-      //            (ограничиться NonZeroU32::new(value).ok_or(()).get() - норм)
-      //            или даже заиспользовать tightness
-      if value == 0 {
-        return Err(()); // в наших логах нет нулей, ноль в операции - фикция
-      }
-      Ok((&remaining[end_idx..], value))
+      let tight_value = *MyNonZeroU32::new(value).map_err(|_| ())?.get();
+
+      Ok((&remaining[end_idx..], tight_value))
     }
   }
   /// Знаковые числа
@@ -58,10 +55,9 @@ mod stdp {
         .find_map(|(idx, c)| (!c.is_ascii_digit()).then_some(idx))
         .unwrap_or(input.len());
       let value = input[..end_idx].parse().map_err(|_| ())?;
-      if value == 0 {
-        return Err(()); // в наших логах нет нулей, ноль в операции - фикция
-      }
-      Ok((&input[end_idx..], value))
+      let tight_value = *MyNonZeroi32::new(value).map_err(|_| ())?.get();
+
+      Ok((&input[end_idx..], tight_value))
     }
   }
   /// Шестнадцатеричные байты (пригодится при парсинге блобов)
@@ -71,10 +67,9 @@ mod stdp {
     type Dest = u8;
     fn parse<'a>(&self, input: &'a str) -> Result<(&'a str, Self::Dest), ()> {
       let (to_parse, remaining) = input.split_at_checked(2).ok_or(())?;
-      if !to_parse.chars().all(|c| c.is_ascii_hexdigit()) {
-        return Err(());
-      }
-      let value = u8::from_str_radix(to_parse, 16).map_err(|_| ())?;
+      let hexdigit_str =
+        MyAsciiHexDigit::new(to_parse.to_string()).map_err(|_| ())?;
+      let value = u8::from_str_radix(hexdigit_str.get(), 16).map_err(|_| ())?;
       Ok((&remaining, value))
     }
   }

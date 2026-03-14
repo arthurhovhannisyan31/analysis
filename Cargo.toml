@@ -17,3 +17,4 @@ name = "cli"
 path = "src/main.rs"
 
 [dependencies]
+tightness = "1"
