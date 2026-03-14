@@ -90,28 +90,7 @@ fn quote(input: &str) -> String {
   result.push('"');
   result
 }
-/// Распарсить строку, которую ранее [обернули в кавычки](quote)
-// `"abc\"def\\ghi"nice` -> (`abcd"def\ghi`, `nice`)
-fn do_unquote<'a>(input: &'a str) -> Result<(&'a str, String), ()> {
-  let mut result = String::new();
-  let mut escaped_now = false;
-  let mut chars = input.strip_prefix("\"").ok_or(())?.chars();
-  while let Some(c) = chars.next() {
-    match (c, escaped_now) {
-      ('"' | '\\', true) => {
-        result.push(c);
-        escaped_now = false;
-      }
-      ('\\', false) => escaped_now = true,
-      ('"', false) => return Ok((chars.as_str(), result)),
-      (c, _) => {
-        result.push(c);
-        escaped_now = false;
-      }
-    }
-  }
-  Err(()) // строка кончилась, не закрыв кавычку
-}
+
 /// Распарсить строку, обёрную в кавычки
 /// (сокращённая версия [do_unquote], в которой вложенные кавычки не предусмотрены)
 fn do_unquote_non_escaped(input: &str) -> Result<(&str, &str), ()> {
@@ -132,10 +111,30 @@ impl Unquote {
     Self
   }
 }
+/// Распарсить строку, которую ранее [обернули в кавычки](quote)
+// `"abc\"def\\ghi"nice` -> (`abcd"def\ghi`, `nice`)
 impl Parser for Unquote {
   type Dest = String;
   fn parse<'a>(&self, input: &'a str) -> Result<(&'a str, Self::Dest), ()> {
-    do_unquote(input)
+    let mut result = String::new();
+    let mut escaped_now = false;
+    let mut chars = input.strip_prefix("\"").ok_or(())?.chars();
+
+    while let Some(c) = chars.next() {
+      match (c, escaped_now) {
+        ('"' | '\\', true) => {
+          result.push(c);
+          escaped_now = false;
+        }
+        ('\\', false) => escaped_now = true,
+        ('"', false) => return Ok((chars.as_str(), result)),
+        (c, _) => {
+          result.push(c);
+          escaped_now = false;
+        }
+      }
+    }
+    Err(()) // строка кончилась, не закрыв кавычку
   }
 }
 
@@ -395,6 +394,7 @@ fn all4<A0: Parser, A1: Parser, A2: Parser, A3: Parser>(
     parser: (a0, a1, a2, a3),
   }
 }
+
 /// Комбинатор, который вытаскивает значения из пары `"ключ":значение,`.
 /// Для простоты реализации, запятая всегда нужна в конце пары ключ-значение,
 /// простое '"ключ":значение' читаться не будет
@@ -445,7 +445,7 @@ where
 {
   type Dest = (A0::Dest, A1::Dest);
   fn parse<'a>(&self, input: &'a str) -> Result<(&'a str, Self::Dest), ()> {
-    match self.parsers.0.parse(input.clone()) {
+    match self.parsers.0.parse(input) {
       Ok((remaining, a0)) => self
         .parsers
         .1
@@ -477,66 +477,58 @@ where
 {
   type Dest = (A0::Dest, A1::Dest, A2::Dest);
   fn parse<'a>(&self, input: &'a str) -> Result<(&'a str, Self::Dest), ()> {
-    match self.parsers.0.parse(input.clone()) {
-      Ok((remaining, a0)) => {
-        match self.parsers.1.parse(remaining.clone()) {
-          Ok((remaining, a1)) => self
-            .parsers
-            .2
-            .parse(remaining)
-            .map(|(remaining, a2)| (remaining, (a0, a1, a2))),
-          Err(()) => self.parsers.2.parse(remaining.clone()).and_then(
-            |(remaining, a2)| {
-              self
-                .parsers
-                .1
-                .parse(remaining)
-                .map(|(remaining, a1)| (remaining, (a0, a1, a2)))
-            },
-          ),
+    match self.parsers.0.parse(input) {
+      Ok((remaining, a0)) => match self.parsers.1.parse(remaining) {
+        Ok((remaining, a1)) => self
+          .parsers
+          .2
+          .parse(remaining)
+          .map(|(remaining, a2)| (remaining, (a0, a1, a2))),
+        Err(()) => {
+          self.parsers.2.parse(remaining).and_then(|(remaining, a2)| {
+            self
+              .parsers
+              .1
+              .parse(remaining)
+              .map(|(remaining, a1)| (remaining, (a0, a1, a2)))
+          })
         }
-      }
-      Err(()) => match self.parsers.1.parse(input.clone()) {
-        Ok((remaining, a1)) => match self.parsers.0.parse(remaining.clone()) {
+      },
+      Err(()) => match self.parsers.1.parse(input) {
+        Ok((remaining, a1)) => match self.parsers.0.parse(remaining) {
           Ok((remaining, a0)) => self
             .parsers
             .2
             .parse(remaining)
             .map(|(remaining, a2)| (remaining, (a0, a1, a2))),
-          Err(()) => self.parsers.2.parse(remaining.clone()).and_then(
-            |(remaining, a2)| {
+          Err(()) => {
+            self.parsers.2.parse(remaining).and_then(|(remaining, a2)| {
               self
                 .parsers
                 .0
                 .parse(remaining)
                 .map(|(remaining, a0)| (remaining, (a0, a1, a2)))
-            },
-          ),
-        },
-        Err(()) => {
-          self
-            .parsers
-            .2
-            .parse(input.clone())
-            .and_then(|(remaining, a2)| {
-              match self.parsers.0.parse(remaining.clone()) {
-                Ok((remaining, a0)) => self
-                  .parsers
-                  .1
-                  .parse(remaining)
-                  .map(|(remaining, a1)| (remaining, (a0, a1, a2))),
-                Err(()) => self.parsers.1.parse(remaining.clone()).and_then(
-                  |(remaining, a1)| {
-                    self
-                      .parsers
-                      .0
-                      .parse(remaining)
-                      .map(|(remaining, a0)| (remaining, (a0, a1, a2)))
-                  },
-                ),
-              }
             })
-        }
+          }
+        },
+        Err(()) => self.parsers.2.parse(input).and_then(|(remaining, a2)| {
+          match self.parsers.0.parse(remaining) {
+            Ok((remaining, a0)) => self
+              .parsers
+              .1
+              .parse(remaining)
+              .map(|(remaining, a1)| (remaining, (a0, a1, a2))),
+            Err(()) => {
+              self.parsers.1.parse(remaining).and_then(|(remaining, a1)| {
+                self
+                  .parsers
+                  .0
+                  .parse(remaining)
+                  .map(|(remaining, a0)| (remaining, (a0, a1, a2)))
+              })
+            }
+          }
+        }),
       },
     }
   }
@@ -606,7 +598,7 @@ where
 {
   type Dest = Dest;
   fn parse<'a>(&self, input: &'a str) -> Result<(&'a str, Self::Dest), ()> {
-    if let Ok(ok) = self.parser.0.parse(input.clone()) {
+    if let Ok(ok) = self.parser.0.parse(input) {
       return Ok(ok);
     }
     self.parser.1.parse(input)
@@ -629,13 +621,13 @@ where
   type Dest = Dest;
   fn parse<'a>(&self, input: &'a str) -> Result<(&'a str, Self::Dest), ()> {
     // match вместо тут не подойдёт - нужно лениво
-    if let Ok(ok) = self.parser.0.parse(input.clone()) {
+    if let Ok(ok) = self.parser.0.parse(input) {
       return Ok(ok);
     }
-    if let Ok(ok) = self.parser.1.parse(input.clone()) {
+    if let Ok(ok) = self.parser.1.parse(input) {
       return Ok(ok);
     }
-    self.parser.2.parse(input.clone())
+    self.parser.2.parse(input)
   }
 }
 /// Конструктор [Alt] для трёх парсеров
@@ -663,16 +655,16 @@ where
 {
   type Dest = Dest;
   fn parse<'a>(&self, input: &'a str) -> Result<(&'a str, Self::Dest), ()> {
-    if let Ok(ok) = self.parser.0.parse(input.clone()) {
+    if let Ok(ok) = self.parser.0.parse(input) {
       return Ok(ok);
     }
-    if let Ok(ok) = self.parser.1.parse(input.clone()) {
+    if let Ok(ok) = self.parser.1.parse(input) {
       return Ok(ok);
     }
-    if let Ok(ok) = self.parser.2.parse(input.clone()) {
+    if let Ok(ok) = self.parser.2.parse(input) {
       return Ok(ok);
     }
-    self.parser.3.parse(input.clone())
+    self.parser.3.parse(input)
   }
 }
 /// Конструктор [Alt] для четырёх парсеров
@@ -707,28 +699,28 @@ where
 {
   type Dest = Dest;
   fn parse<'a>(&self, input: &'a str) -> Result<(&'a str, Self::Dest), ()> {
-    if let Ok(ok) = self.parser.0.parse(input.clone()) {
+    if let Ok(ok) = self.parser.0.parse(input) {
       return Ok(ok);
     }
-    if let Ok(ok) = self.parser.1.parse(input.clone()) {
+    if let Ok(ok) = self.parser.1.parse(input) {
       return Ok(ok);
     }
-    if let Ok(ok) = self.parser.2.parse(input.clone()) {
+    if let Ok(ok) = self.parser.2.parse(input) {
       return Ok(ok);
     }
-    if let Ok(ok) = self.parser.3.parse(input.clone()) {
+    if let Ok(ok) = self.parser.3.parse(input) {
       return Ok(ok);
     }
-    if let Ok(ok) = self.parser.4.parse(input.clone()) {
+    if let Ok(ok) = self.parser.4.parse(input) {
       return Ok(ok);
     }
-    if let Ok(ok) = self.parser.5.parse(input.clone()) {
+    if let Ok(ok) = self.parser.5.parse(input) {
       return Ok(ok);
     }
-    if let Ok(ok) = self.parser.6.parse(input.clone()) {
+    if let Ok(ok) = self.parser.6.parse(input) {
       return Ok(ok);
     }
-    self.parser.7.parse(input.clone())
+    self.parser.7.parse(input)
   }
 }
 /// Конструктор [Alt] для восьми парсеров
