@@ -1,3 +1,4 @@
+pub mod macros;
 pub mod parse;
 pub mod types;
 
@@ -12,16 +13,15 @@ pub enum ReadMode {
   Errors = 1,
   Exchanges = 2,
 }
+impl TryFrom<u8> for ReadMode {
+  type Error = String;
 
-impl From<u8> for ReadMode {
-  fn from(value: u8) -> Self {
+  fn try_from(value: u8) -> Result<Self, Self::Error> {
     match value {
-      0 => ReadMode::All,
-      1 => ReadMode::Errors,
-      2 => ReadMode::Exchanges,
-      _ => {
-        panic!("unknown mode {}", value)
-      }
+      0 => Ok(ReadMode::All),
+      1 => Ok(ReadMode::Errors),
+      2 => Ok(ReadMode::Exchanges),
+      _ => Err(format!("unknown mode {}", value)),
     }
   }
 }
@@ -60,16 +60,18 @@ pub fn read_log<R: BufRead + Debug>(
 ) -> Vec<LogLine> {
   LogIterator::new(input)
     .filter(|log| {
-      let request_ids_empty = request_ids.is_empty();
+      if request_ids.is_empty() {
+        return true;
+      }
       let has_log_request_id = request_ids.contains(&log.request_id);
-      let read_mode = match ReadMode::from(mode) {
-        ReadMode::All => true,
-        ReadMode::Errors => matches!(
+      let read_mode = match ReadMode::try_from(mode) {
+        Ok(ReadMode::All) => true,
+        Ok(ReadMode::Errors) => matches!(
           &log.kind,
           LogKind::System(SystemLogKind::Error(_))
             | LogKind::App(AppLogKind::Error(_))
         ),
-        ReadMode::Exchanges => matches!(
+        Ok(ReadMode::Exchanges) => matches!(
           &log.kind,
           LogKind::App(AppLogKind::Journal(
             AppLogJournalKind::BuyAsset(_)
@@ -80,9 +82,10 @@ pub fn read_log<R: BufRead + Debug>(
               | AppLogJournalKind::WithdrawCash(_)
           ))
         ),
+        Err(_) => false,
       };
 
-      request_ids_empty || has_log_request_id && read_mode
+      has_log_request_id && read_mode
     })
     .collect()
 }
