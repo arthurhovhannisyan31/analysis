@@ -17,3 +17,5 @@ name = "cli"
 path = "src/main.rs"
 
 [dependencies]
+tightness = "1"
+perm_macro = { path = "./src/perm_macro" }
