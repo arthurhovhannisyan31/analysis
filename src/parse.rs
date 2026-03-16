@@ -1,3 +1,6 @@
+use crate::{gen_all, gen_alt};
+use perm_macro::gen_permutation;
+
 /// Трейт, чтобы **реализовывать** и **требовать** метод 'распарсь и покажи,
 /// что распарсить осталось'
 trait Parser {
@@ -315,85 +318,10 @@ where
 struct All<T> {
   parser: T,
 }
-impl<A0, A1> Parser for All<(A0, A1)>
-where
-  A0: Parser,
-  A1: Parser,
-{
-  type Dest = (A0::Dest, A1::Dest);
-  fn parse<'a>(&self, input: &'a str) -> Result<(&'a str, Self::Dest), ()> {
-    let (remaining, a0) = self.parser.0.parse(input)?;
-    self
-      .parser
-      .1
-      .parse(remaining)
-      .map(|(remaining, a1)| (remaining, (a0, a1)))
-  }
-}
-/// Конструктор [All] для двух парсеров
-/// (в Rust нет чего-то, вроде variadic templates из C++)
-fn all2<A0: Parser, A1: Parser>(a0: A0, a1: A1) -> All<(A0, A1)> {
-  All { parser: (a0, a1) }
-}
-impl<A0, A1, A2> Parser for All<(A0, A1, A2)>
-where
-  A0: Parser,
-  A1: Parser,
-  A2: Parser,
-{
-  type Dest = (A0::Dest, A1::Dest, A2::Dest);
-  fn parse<'a>(&self, input: &'a str) -> Result<(&'a str, Self::Dest), ()> {
-    let (remaining, a0) = self.parser.0.parse(input)?;
-    let (remaining, a1) = self.parser.1.parse(remaining)?;
-    self
-      .parser
-      .2
-      .parse(remaining)
-      .map(|(remaining, a2)| (remaining, (a0, a1, a2)))
-  }
-}
-/// Конструктор [All] для трёх парсеров
-/// (в Rust нет чего-то, вроде variadic templates из C++)
-fn all3<A0: Parser, A1: Parser, A2: Parser>(
-  a0: A0,
-  a1: A1,
-  a2: A2,
-) -> All<(A0, A1, A2)> {
-  All {
-    parser: (a0, a1, a2),
-  }
-}
-impl<A0, A1, A2, A3> Parser for All<(A0, A1, A2, A3)>
-where
-  A0: Parser,
-  A1: Parser,
-  A2: Parser,
-  A3: Parser,
-{
-  type Dest = (A0::Dest, A1::Dest, A2::Dest, A3::Dest);
-  fn parse<'a>(&self, input: &'a str) -> Result<(&'a str, Self::Dest), ()> {
-    let (remaining, a0) = self.parser.0.parse(input)?;
-    let (remaining, a1) = self.parser.1.parse(remaining)?;
-    let (remaining, a2) = self.parser.2.parse(remaining)?;
-    self
-      .parser
-      .3
-      .parse(remaining)
-      .map(|(remaining, a3)| (remaining, (a0, a1, a2, a3)))
-  }
-}
-/// Конструктор [All] для четырёх парсеров
-/// (в Rust нет чего-то, вроде variadic templates из C++)
-fn all4<A0: Parser, A1: Parser, A2: Parser, A3: Parser>(
-  a0: A0,
-  a1: A1,
-  a2: A2,
-  a3: A3,
-) -> All<(A0, A1, A2, A3)> {
-  All {
-    parser: (a0, a1, a2, a3),
-  }
-}
+
+gen_all!(all2, 0 A0 a0, 1 A1 a1);
+gen_all!(all3, 0 A0 a0, 1 A1 a1, 2 A2 a2);
+gen_all!(all4, 0 A0 a0, 1 A1 a1, 2 A2 a2, 3 A3 a3);
 
 /// Комбинатор, который вытаскивает значения из пары `"ключ":значение,`.
 /// Для простоты реализации, запятая всегда нужна в конце пары ключ-значение,
@@ -438,112 +366,10 @@ where
 struct Permutation<T> {
   parsers: T,
 }
-impl<A0, A1> Parser for Permutation<(A0, A1)>
-where
-  A0: Parser,
-  A1: Parser,
-{
-  type Dest = (A0::Dest, A1::Dest);
-  fn parse<'a>(&self, input: &'a str) -> Result<(&'a str, Self::Dest), ()> {
-    match self.parsers.0.parse(input) {
-      Ok((remaining, a0)) => self
-        .parsers
-        .1
-        .parse(remaining)
-        .map(|(remaining, a1)| (remaining, (a0, a1))),
-      Err(()) => self.parsers.1.parse(input).and_then(|(remaining, a1)| {
-        self
-          .parsers
-          .0
-          .parse(remaining)
-          .map(|(remaining, a0)| (remaining, (a0, a1)))
-      }),
-    }
-  }
-}
-/// Конструктор [Permutation] для двух парсеров
-/// (в Rust нет чего-то, вроде variadic templates из C++)
-fn permutation2<A0: Parser, A1: Parser>(
-  a0: A0,
-  a1: A1,
-) -> Permutation<(A0, A1)> {
-  Permutation { parsers: (a0, a1) }
-}
-impl<A0, A1, A2> Parser for Permutation<(A0, A1, A2)>
-where
-  A0: Parser,
-  A1: Parser,
-  A2: Parser,
-{
-  type Dest = (A0::Dest, A1::Dest, A2::Dest);
-  fn parse<'a>(&self, input: &'a str) -> Result<(&'a str, Self::Dest), ()> {
-    match self.parsers.0.parse(input) {
-      Ok((remaining, a0)) => match self.parsers.1.parse(remaining) {
-        Ok((remaining, a1)) => self
-          .parsers
-          .2
-          .parse(remaining)
-          .map(|(remaining, a2)| (remaining, (a0, a1, a2))),
-        Err(()) => {
-          self.parsers.2.parse(remaining).and_then(|(remaining, a2)| {
-            self
-              .parsers
-              .1
-              .parse(remaining)
-              .map(|(remaining, a1)| (remaining, (a0, a1, a2)))
-          })
-        }
-      },
-      Err(()) => match self.parsers.1.parse(input) {
-        Ok((remaining, a1)) => match self.parsers.0.parse(remaining) {
-          Ok((remaining, a0)) => self
-            .parsers
-            .2
-            .parse(remaining)
-            .map(|(remaining, a2)| (remaining, (a0, a1, a2))),
-          Err(()) => {
-            self.parsers.2.parse(remaining).and_then(|(remaining, a2)| {
-              self
-                .parsers
-                .0
-                .parse(remaining)
-                .map(|(remaining, a0)| (remaining, (a0, a1, a2)))
-            })
-          }
-        },
-        Err(()) => self.parsers.2.parse(input).and_then(|(remaining, a2)| {
-          match self.parsers.0.parse(remaining) {
-            Ok((remaining, a0)) => self
-              .parsers
-              .1
-              .parse(remaining)
-              .map(|(remaining, a1)| (remaining, (a0, a1, a2))),
-            Err(()) => {
-              self.parsers.1.parse(remaining).and_then(|(remaining, a1)| {
-                self
-                  .parsers
-                  .0
-                  .parse(remaining)
-                  .map(|(remaining, a0)| (remaining, (a0, a1, a2)))
-              })
-            }
-          }
-        }),
-      },
-    }
-  }
-}
-/// Конструктор [Permutation] для трёх парсеров
-/// (в Rust нет чего-то, вроде variadic templates из C++)
-fn permutation3<A0: Parser, A1: Parser, A2: Parser>(
-  a0: A0,
-  a1: A1,
-  a2: A2,
-) -> Permutation<(A0, A1, A2)> {
-  Permutation {
-    parsers: (a0, a1, a2),
-  }
-}
+
+gen_permutation!(2);
+gen_permutation!(3);
+
 /// Комбинатор списка из любого числа элементов, которые надо читать
 /// вложенным парсером. Граница списка определяется квадратными (`[`&`]`)
 /// скобками.
@@ -591,164 +417,11 @@ impl<T: Parser> Parser for List<T> {
 struct Alt<T> {
   parser: T,
 }
-impl<A0, A1, Dest> Parser for Alt<(A0, A1)>
-where
-  A0: Parser<Dest = Dest>,
-  A1: Parser<Dest = Dest>,
-{
-  type Dest = Dest;
-  fn parse<'a>(&self, input: &'a str) -> Result<(&'a str, Self::Dest), ()> {
-    if let Ok(ok) = self.parser.0.parse(input) {
-      return Ok(ok);
-    }
-    self.parser.1.parse(input)
-  }
-}
-/// Конструктор [Alt] для двух парсеров
-/// (в Rust нет чего-то, вроде variadic templates из C++)
-fn alt2<Dest, A0: Parser<Dest = Dest>, A1: Parser<Dest = Dest>>(
-  a0: A0,
-  a1: A1,
-) -> Alt<(A0, A1)> {
-  Alt { parser: (a0, a1) }
-}
-impl<A0, A1, A2, Dest> Parser for Alt<(A0, A1, A2)>
-where
-  A0: Parser<Dest = Dest>,
-  A1: Parser<Dest = Dest>,
-  A2: Parser<Dest = Dest>,
-{
-  type Dest = Dest;
-  fn parse<'a>(&self, input: &'a str) -> Result<(&'a str, Self::Dest), ()> {
-    // match вместо тут не подойдёт - нужно лениво
-    if let Ok(ok) = self.parser.0.parse(input) {
-      return Ok(ok);
-    }
-    if let Ok(ok) = self.parser.1.parse(input) {
-      return Ok(ok);
-    }
-    self.parser.2.parse(input)
-  }
-}
-/// Конструктор [Alt] для трёх парсеров
-/// (в Rust нет чего-то, вроде variadic templates из C++)
-fn alt3<
-  Dest,
-  A0: Parser<Dest = Dest>,
-  A1: Parser<Dest = Dest>,
-  A2: Parser<Dest = Dest>,
->(
-  a0: A0,
-  a1: A1,
-  a2: A2,
-) -> Alt<(A0, A1, A2)> {
-  Alt {
-    parser: (a0, a1, a2),
-  }
-}
-impl<A0, A1, A2, A3, Dest> Parser for Alt<(A0, A1, A2, A3)>
-where
-  A0: Parser<Dest = Dest>,
-  A1: Parser<Dest = Dest>,
-  A2: Parser<Dest = Dest>,
-  A3: Parser<Dest = Dest>,
-{
-  type Dest = Dest;
-  fn parse<'a>(&self, input: &'a str) -> Result<(&'a str, Self::Dest), ()> {
-    if let Ok(ok) = self.parser.0.parse(input) {
-      return Ok(ok);
-    }
-    if let Ok(ok) = self.parser.1.parse(input) {
-      return Ok(ok);
-    }
-    if let Ok(ok) = self.parser.2.parse(input) {
-      return Ok(ok);
-    }
-    self.parser.3.parse(input)
-  }
-}
-/// Конструктор [Alt] для четырёх парсеров
-/// (в Rust нет чего-то, вроде variadic templates из C++)
-fn alt4<
-  Dest,
-  A0: Parser<Dest = Dest>,
-  A1: Parser<Dest = Dest>,
-  A2: Parser<Dest = Dest>,
-  A3: Parser<Dest = Dest>,
->(
-  a0: A0,
-  a1: A1,
-  a2: A2,
-  a3: A3,
-) -> Alt<(A0, A1, A2, A3)> {
-  Alt {
-    parser: (a0, a1, a2, a3),
-  }
-}
-impl<A0, A1, A2, A3, A4, A5, A6, A7, Dest> Parser
-  for Alt<(A0, A1, A2, A3, A4, A5, A6, A7)>
-where
-  A0: Parser<Dest = Dest>,
-  A1: Parser<Dest = Dest>,
-  A2: Parser<Dest = Dest>,
-  A3: Parser<Dest = Dest>,
-  A4: Parser<Dest = Dest>,
-  A5: Parser<Dest = Dest>,
-  A6: Parser<Dest = Dest>,
-  A7: Parser<Dest = Dest>,
-{
-  type Dest = Dest;
-  fn parse<'a>(&self, input: &'a str) -> Result<(&'a str, Self::Dest), ()> {
-    if let Ok(ok) = self.parser.0.parse(input) {
-      return Ok(ok);
-    }
-    if let Ok(ok) = self.parser.1.parse(input) {
-      return Ok(ok);
-    }
-    if let Ok(ok) = self.parser.2.parse(input) {
-      return Ok(ok);
-    }
-    if let Ok(ok) = self.parser.3.parse(input) {
-      return Ok(ok);
-    }
-    if let Ok(ok) = self.parser.4.parse(input) {
-      return Ok(ok);
-    }
-    if let Ok(ok) = self.parser.5.parse(input) {
-      return Ok(ok);
-    }
-    if let Ok(ok) = self.parser.6.parse(input) {
-      return Ok(ok);
-    }
-    self.parser.7.parse(input)
-  }
-}
-/// Конструктор [Alt] для восьми парсеров
-/// (в Rust нет чего-то, вроде variadic templates из C++)
-fn alt8<
-  Dest,
-  A0: Parser<Dest = Dest>,
-  A1: Parser<Dest = Dest>,
-  A2: Parser<Dest = Dest>,
-  A3: Parser<Dest = Dest>,
-  A4: Parser<Dest = Dest>,
-  A5: Parser<Dest = Dest>,
-  A6: Parser<Dest = Dest>,
-  A7: Parser<Dest = Dest>,
->(
-  a0: A0,
-  a1: A1,
-  a2: A2,
-  a3: A3,
-  a4: A4,
-  a5: A5,
-  a6: A6,
-  a7: A7,
-) -> Alt<(A0, A1, A2, A3, A4, A5, A6, A7)> {
-  Alt {
-    parser: (a0, a1, a2, a3, a4, a5, a6, a7),
-  }
-}
+
+gen_alt!(alt2, 0 A0 a0, 1 A1 a1);
+gen_alt!(alt3, 0 A0 a0, 1 A1 a1, 2 A2 a2);
+gen_alt!(alt4, 0 A0 a0, 1 A1 a1, 2 A2 a2, 3 A3 a3);
+gen_alt!(alt8, 0 A0 a0, 1 A1 a1, 2 A2 a2, 3 A3 a3, 4 A4 a4, 5 A5 a5, 6 A6 a6, 7 A7 a7);
 
 /// Комбинатор для применения дочернего парсера N раз
 /// (аналог `take` из `nom`)
