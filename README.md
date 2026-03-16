@@ -8,16 +8,34 @@
 
 ## Overview
 
+This is a demo crate which shows code refactoring results.
+
+The main purpose of the crate is text parsing using specific format. Please see [main](./src/main.rs) for details.
 
 ## Description
 
+The main part of code refactor covers code generation for functions with different number of arguments. Please
+see [declarative](./src/macros.rs) and [procedural](./src/perm_macro) macros implementation for details.
+Rest of code refactor covers performance, safety and code readability issues.
+
 ## Usage
 
+Please run following commands for test purposes:
+
+```bash
+cargo test -- --nocapture
+cargo test test_all -- --nocapture
+cargo run example.log 
+```
 
 ## Stack
 
 - [Rust](https://rust-lang.org/)
-
+- [itertools](https://crates.io/crates/itertools)
+- [proc-macro2](https://crates.io/crates/proc-macro2)
+- [quote](https://crates.io/crates/quote)
+- [syn](https://crates.io/crates/syn)
+- [tightness](https://crates.io/crates/tightness)
 
 ## Credits
 
