@@ -71,7 +71,7 @@ fn main() {
   let file = std::fs::File::open(filename).unwrap();
   let file_reader = BufReader::with_capacity(4096, file);
 
-  let logs = analysis::read_log(file_reader, ReadMode::All as u8, vec![]);
+  let logs = analysis::read_log(file_reader, ReadMode::All, vec![]);
   println!("got logs:");
   logs.iter().for_each(|parsed| println!("  {:?}", parsed));
 }

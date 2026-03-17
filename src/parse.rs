@@ -17,7 +17,7 @@ trait Parsable: Sized {
 mod stdp {
   // parsers for std types
   use super::Parser;
-  use crate::types::{MyAsciiHexDigit, MyNonZeroU32, MyNonZeroi32};
+  use crate::types::{MyAsciiHexDigit, MyNonZeroi32, MyNonZerou32};
 
   /// Беззнаковые числа
   #[derive(Debug)]
@@ -41,7 +41,7 @@ mod stdp {
         if is_hex { 16 } else { 10 },
       )
       .map_err(|_| ())?;
-      let tight_value = *MyNonZeroU32::new(value).map_err(|_| ())?.get();
+      let tight_value = *MyNonZerou32::new(value).map_err(|_| ())?.get();
 
       Ok((&remaining[end_idx..], tight_value))
     }

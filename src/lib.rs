@@ -7,7 +7,6 @@ use std::fmt::Debug;
 use std::io::{BufRead, Lines};
 use std::iter::Filter;
 
-#[repr(usize)]
 pub enum ReadMode {
   All = 0,
   Errors = 1,
@@ -55,7 +54,7 @@ impl<R: BufRead> Iterator for LogIterator<R> {
 
 pub fn read_log<R: BufRead + Debug>(
   input: R,
-  mode: u8,
+  mode: ReadMode,
   request_ids: Vec<u32>,
 ) -> Vec<LogLine> {
   LogIterator::new(input)
@@ -64,14 +63,14 @@ pub fn read_log<R: BufRead + Debug>(
         return true;
       }
       let has_log_request_id = request_ids.contains(&log.request_id);
-      let read_mode = match ReadMode::try_from(mode) {
-        Ok(ReadMode::All) => true,
-        Ok(ReadMode::Errors) => matches!(
+      let read_mode = match mode {
+        ReadMode::All => true,
+        ReadMode::Errors => matches!(
           &log.kind,
           LogKind::System(SystemLogKind::Error(_))
             | LogKind::App(AppLogKind::Error(_))
         ),
-        Ok(ReadMode::Exchanges) => matches!(
+        ReadMode::Exchanges => matches!(
           &log.kind,
           LogKind::App(AppLogKind::Journal(
             AppLogJournalKind::BuyAsset(_)
@@ -82,7 +81,6 @@ pub fn read_log<R: BufRead + Debug>(
               | AppLogJournalKind::WithdrawCash(_)
           ))
         ),
-        Err(_) => false,
       };
 
       has_log_request_id && read_mode
@@ -166,12 +164,12 @@ App::Journal BuyAsset UserBacket{"user_id":"Alice","backet":Backet{"asset_id":"m
   fn test_all() {
     let source_short_reader = BufReader::new(SOURCE_SHORT.as_bytes());
     assert_eq!(
-      read_log(source_short_reader, ReadMode::All as u8, vec![]).len(),
+      read_log(source_short_reader, ReadMode::All, vec![]).len(),
       1
     );
 
     let source_long_reader = BufReader::new(SOURCE_LONG.as_bytes());
-    let all_parsed = read_log(source_long_reader, ReadMode::All as u8, vec![]);
+    let all_parsed = read_log(source_long_reader, ReadMode::All, vec![]);
     println!("all parsed:");
     all_parsed
       .iter()
